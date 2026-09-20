@@ -31,27 +31,44 @@ export default function Home() {
     const text = (raw ?? query).trim();
     if (!text) return;
     setQuery(text);
-    setLoading(true);
     setError('');
-    setResult(null);
     setSongs([]);
+
+    const cacheKey = `wordpop-cache:${text.toLowerCase()}`;
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch {}
+
+    if (cached) {
+      setResult(cached);
+      setLoading(false);
+      fetch(`/api/songs?term=${encodeURIComponent(cached.word)}`)
+        .then((r) => r.json())
+        .then((j) => setSongs(j.songs || []))
+        .catch(() => {});
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
 
     try {
       const lookupRes = await fetch(`/api/lookup?q=${encodeURIComponent(text)}`);
       const lookup = await lookupRes.json();
       if (!lookupRes.ok) throw new Error(lookup.error || '단어를 찾지 못했습니다.');
       setResult(lookup);
+      setLoading(false);
+      try { localStorage.setItem(cacheKey, JSON.stringify(lookup)); } catch {}
 
       const nextRecent = [text, ...recent.filter((x) => x !== text)].slice(0, 7);
       setRecent(nextRecent);
       localStorage.setItem('wordpop-recent', JSON.stringify(nextRecent));
 
-      const songRes = await fetch(`/api/songs?term=${encodeURIComponent(lookup.word)}`);
-      const songJson = await songRes.json();
-      if (songRes.ok) setSongs(songJson.songs || []);
+      fetch(`/api/songs?term=${encodeURIComponent(lookup.word)}`)
+        .then((r) => r.json())
+        .then((j) => setSongs(j.songs || []))
+        .catch(() => {});
     } catch (e) {
       setError(e.message || '검색 중 오류가 발생했습니다.');
-    } finally {
       setLoading(false);
     }
   }
