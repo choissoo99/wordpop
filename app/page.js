@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-const starterWords = ['apple', 'love', 'happy', 'beautiful', 'dream'];
+const starterWords = ['apple', 'middle', 'center', 'love', 'beautiful'];
 
 function speak(text, lang = 'en-US') {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
@@ -16,8 +16,13 @@ function speak(text, lang = 'en-US') {
 export default function Home() {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState(null);
+  const [examples, setExamples] = useState([]);
+  const [related, setRelated] = useState([]);
   const [songs, setSongs] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingCore, setLoadingCore] = useState(false);
+  const [loadingExamples, setLoadingExamples] = useState(false);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [loadingSongs, setLoadingSongs] = useState(false);
   const [error, setError] = useState('');
   const [recent, setRecent] = useState([]);
 
@@ -30,46 +35,72 @@ export default function Home() {
   async function search(raw) {
     const text = (raw ?? query).trim();
     if (!text) return;
+
     setQuery(text);
     setError('');
+    setExamples([]);
+    setRelated([]);
     setSongs([]);
 
-    const cacheKey = `wordpop-cache:${text.toLowerCase()}`;
-    let cached = null;
-    try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch {}
+    const key = text.toLowerCase();
+    const coreKey = `wordpop-core:${key}`;
+    let core = null;
 
-    if (cached) {
-      setResult(cached);
-      setLoading(false);
-      fetch(`/api/songs?term=${encodeURIComponent(cached.word)}`)
-        .then((r) => r.json())
-        .then((j) => setSongs(j.songs || []))
-        .catch(() => {});
-      return;
-    }
-
-    setLoading(true);
-    setResult(null);
+    try { core = JSON.parse(localStorage.getItem(coreKey) || 'null'); } catch {}
 
     try {
-      const lookupRes = await fetch(`/api/lookup?q=${encodeURIComponent(text)}`);
-      const lookup = await lookupRes.json();
-      if (!lookupRes.ok) throw new Error(lookup.error || '단어를 찾지 못했습니다.');
-      setResult(lookup);
-      setLoading(false);
-      try { localStorage.setItem(cacheKey, JSON.stringify(lookup)); } catch {}
+      if (!core) {
+        setLoadingCore(true);
+        const res = await fetch(`/api/lookup?q=${encodeURIComponent(text)}&part=core`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || '단어를 찾지 못했습니다.');
+        core = json;
+        try { localStorage.setItem(coreKey, JSON.stringify(core)); } catch {}
+      }
+
+      setResult(core);
+      setLoadingCore(false);
 
       const nextRecent = [text, ...recent.filter((x) => x !== text)].slice(0, 7);
       setRecent(nextRecent);
-      localStorage.setItem('wordpop-recent', JSON.stringify(nextRecent));
+      try { localStorage.setItem('wordpop-recent', JSON.stringify(nextRecent)); } catch {}
 
-      fetch(`/api/songs?term=${encodeURIComponent(lookup.word)}`)
-        .then((r) => r.json())
-        .then((j) => setSongs(j.songs || []))
-        .catch(() => {});
+      // 2단계: 예문
+      setLoadingExamples(true);
+      try {
+        const res = await fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=examples`);
+        const json = await res.json();
+        if (res.ok) setExamples(json.examples || []);
+      } finally {
+        setLoadingExamples(false);
+      }
+
+      // 3단계: 관련 단어
+      setLoadingRelated(true);
+      try {
+        const res = await fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=related`);
+        const json = await res.json();
+        if (res.ok) setRelated(json.related || []);
+      } finally {
+        setLoadingRelated(false);
+      }
+
+      // 4단계: 팝송
+      setLoadingSongs(true);
+      try {
+        const res = await fetch(`/api/songs?term=${encodeURIComponent(core.word)}`);
+        const json = await res.json();
+        if (res.ok) setSongs(json.songs || []);
+      } finally {
+        setLoadingSongs(false);
+      }
     } catch (e) {
       setError(e.message || '검색 중 오류가 발생했습니다.');
-      setLoading(false);
+      setResult(null);
+      setLoadingCore(false);
+      setLoadingExamples(false);
+      setLoadingRelated(false);
+      setLoadingSongs(false);
     }
   }
 
@@ -92,14 +123,14 @@ export default function Home() {
           <div className="heroCopy">
             <span className="eyebrow">ENGLISH WORD COMPANION</span>
             <h1>단어 하나로<br/><strong>영어가 연결됩니다.</strong></h1>
-            <p>영어 또는 한글을 입력하면 발음기호, 뜻, 예문, 관련 단어와 팝송까지 한 화면에서 공부하세요.</p>
+            <p>가장 중요한 단어 뜻과 발음을 먼저 보여주고, 예문과 관련 단어, 팝송은 순서대로 불러옵니다.</p>
           </div>
         )}
 
         <form className="searchBox" onSubmit={onSubmit}>
           <span className="searchIcon">⌕</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 또는 한글을 입력하세요  예) beautiful, 아름다운" aria-label="단어 검색"/>
-          <button type="submit" disabled={loading}>{loading ? '찾는 중...' : '검색'}</button>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 또는 한글을 입력하세요" aria-label="단어 검색"/>
+          <button type="submit" disabled={loadingCore}>{loadingCore ? '뜻 찾는 중...' : '검색'}</button>
         </form>
 
         {!result && <div className="quickWords"><span>추천 검색</span>{starterWords.map((word) => <button key={word} onClick={() => search(word)}>{word}</button>)}</div>}
@@ -110,41 +141,44 @@ export default function Home() {
 
       {result && (
         <div className="content">
-          <section className="wordCard panel">
+          <section className="wordCard panel priorityPanel">
             <div>
-              <div className="sourceBadge">{result.inputLanguage === 'ko' ? `“${result.original}” → 영어` : '영어 단어'}</div>
+              <div className="sourceBadge">1순위 · 단어 뜻 + 발음</div>
               <div className="wordTitleRow"><h2>{result.word}</h2><button className="roundSpeak" onClick={() => speak(result.word)} aria-label="단어 발음 듣기">🔊</button></div>
               <div className="phonetic">{result.phonetic || '발음기호 정보 없음'}</div>
               {result.koreanPronunciation && <div className="koPronounce">한글식 발음 · {result.koreanPronunciation}</div>}
             </div>
             <div className="meaningStack">
-              {meanings.slice(0,4).map((item,i)=><div className="meaningItem" key={i}><span>{item.partOfSpeech || 'word'}</span><strong>{item.korean || item.definition}</strong>{item.definition && item.korean && <small>{item.definition}</small>}</div>)}
+              {meanings.slice(0,3).map((item,i)=><div className="meaningItem" key={i}><span>{item.partOfSpeech || 'word'}</span><strong>{item.korean || item.definition}</strong>{item.definition && item.korean && <small>{item.definition}</small>}</div>)}
             </div>
           </section>
 
           <section className="panel">
-            <div className="sectionHead"><div><span className="sectionKicker">EXAMPLES</span><h3>예문으로 익히기</h3></div></div>
-            <div className="exampleList">
-              {(result.examples || []).map((ex,i)=><article className="example" key={i}><div className="exampleNumber">{String(i+1).padStart(2,'0')}</div><div className="exampleText"><p>{ex.en}</p><span>{ex.ko}</span></div><button className="miniSpeak" onClick={()=>speak(ex.en)}>🔊</button></article>)}
-            </div>
+            <div className="sectionHead"><div><span className="sectionKicker">STEP 2</span><h3>예문으로 익히기</h3></div></div>
+            {loadingExamples && <div className="songEmpty">예문을 불러오는 중...</div>}
+            {!loadingExamples && <div className="exampleList">{examples.map((ex,i)=><article className="example" key={i}><div className="exampleNumber">{String(i+1).padStart(2,'0')}</div><div className="exampleText"><p>{ex.en}</p><span>{ex.ko}</span></div><button className="miniSpeak" onClick={()=>speak(ex.en)}>🔊</button></article>)}</div>}
           </section>
 
           <section className="panel">
-            <div className="sectionHead"><div><span className="sectionKicker">RELATED WORDS</span><h3>관련 단어</h3></div></div>
-            <div className="relatedGrid">{(result.related || []).map((item)=><button key={item.word} className="relatedChip" onClick={()=>search(item.word)}><strong>{item.word}</strong><span>{item.ko}</span></button>)}</div>
+            <div className="sectionHead"><div><span className="sectionKicker">STEP 3</span><h3>관련 단어</h3></div></div>
+            {loadingRelated && <div className="songEmpty">관련 단어를 불러오는 중...</div>}
+            {!loadingRelated && <div className="relatedGrid">{related.map((item)=><button key={item.word} className="relatedChip" onClick={()=>search(item.word)}><strong>{item.word}</strong><span>{item.ko}</span></button>)}</div>}
           </section>
 
           <section className="panel songPanel">
             <div className="sectionHead">
-              <div><span className="sectionKicker">LEARN WITH MUSIC</span><h3>🎵 팝송으로 기억하기</h3></div>
+              <div><span className="sectionKicker">STEP 4</span><h3>🎵 팝송으로 기억하기</h3></div>
               <a className="youtubeAll" href={`https://www.youtube.com/results?search_query=${encodeURIComponent(result.word+' song')}`} target="_blank" rel="noreferrer">YouTube에서 더 보기 ↗</a>
             </div>
-            {songs.length>0 ? <div className="songGrid">{songs.slice(0,6).map((song)=><a className="songCard" key={song.id} href={song.youtubeUrl} target="_blank" rel="noreferrer">{song.artwork ? <img src={song.artwork} alt=""/> : <div className="albumFallback">♪</div>}<div><strong>{song.title}</strong><span>{song.artist}</span><small>검색 단어 · {result.word}</small></div><b>▶</b></a>)}</div> : <div className="songEmpty">관련 곡을 자동으로 찾지 못했습니다.</div>}
-            <p className="copyrightNote">※ 저작권 보호를 위해 전체 가사는 제공하지 않고 곡 정보와 외부 검색 링크를 제공합니다.</p>
+            {loadingSongs && <div className="songEmpty">팝송을 마지막으로 불러오는 중...</div>}
+            {!loadingSongs && songs.length>0 && <div className="songGrid">{songs.slice(0,6).map((song)=><a className="songCard" key={song.id} href={song.youtubeUrl} target="_blank" rel="noreferrer">{song.artwork ? <img src={song.artwork} alt=""/> : <div className="albumFallback">♪</div>}<div><strong>{song.title}</strong><span>{song.artist}</span><small>검색 단어 · {result.word}</small></div><b>▶</b></a>)}</div>}
+            {!loadingSongs && songs.length===0 && <div className="songEmpty">관련 곡을 자동으로 찾지 못했습니다.</div>}
+            <p className="copyrightNote">※ 전체 가사는 제공하지 않고 곡 정보와 외부 검색 링크를 제공합니다.</p>
           </section>
         </div>
       )}
-      <footer>WordPop · 단어 하나로 발음부터 팝송까지</footer>
+
+      <footer>WordPop · 뜻과 발음을 먼저, 나머지는 순차적으로</footer>
     </main>
   );
 }
