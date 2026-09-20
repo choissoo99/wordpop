@@ -105,44 +105,58 @@ async function resolveEnglishFromKorean(original){
 export async function GET(request){
   const {searchParams}=new URL(request.url);
   const original=(searchParams.get('q')||'').trim();
+  const part=(searchParams.get('part')||'core').toLowerCase();
   if(!original)return NextResponse.json({error:'검색어를 입력해 주세요.'},{status:400});
 
   const inputLanguage=isKorean(original)?'ko':'en';
   const word=inputLanguage==='ko' ? await resolveEnglishFromKorean(original) : cleanWord(original);
   if(!word)return NextResponse.json({error:`“${original}”에 해당하는 영어 단어를 찾지 못했습니다.`},{status:404});
 
-  const knownKorean=KO_MEANING[word] || (inputLanguage==='ko' ? original : '');
-  const [dictionary, datamuse, translatedMeaning]=await Promise.all([
-    getDictionary(word),
-    getDatamuse(word),
-    knownKorean ? Promise.resolve(knownKorean) : translate(word,'en|ko')
-  ]);
-
-  const data=dictionary||datamuse;
-  if(!data)return NextResponse.json({error:`“${word}” 단어 정보를 찾지 못했습니다. 철자를 확인해 주세요.`},{status:404});
-
-  const meanings=(data.meanings?.length?data.meanings:[{partOfSpeech:'word',definition:'영어 단어'}]).map((m,i)=>({
-    ...m,korean:i===0?(translatedMeaning||''):''
-  }));
-
-  let examples=EXAMPLES[word]?.map(([en,ko])=>({en,ko}))||[];
-  if(!examples.length && data.examples?.length){
-    examples=data.examples.slice(0,3).map(en=>({en,ko:'예문 해석은 빠른 검색을 위해 필요할 때 추가할 수 있습니다.'}));
-  }
-  if(!examples.length){
-    examples=[
+  if(part==='examples'){
+    const preset=EXAMPLES[word]?.map(([en,ko])=>({en,ko}));
+    if(preset?.length){
+      return NextResponse.json({examples:preset.slice(0,3)},{headers:{'Cache-Control':'public, s-maxage=2592000, stale-while-revalidate=2592000'}});
+    }
+    const data=await getDictionary(word);
+    const examples=(data?.examples||[]).slice(0,3).map(en=>({en,ko:'영어 문장으로 먼저 익혀보세요.'}));
+    const fallback=examples.length?examples:[
       {en:`I learned the word “${word}” today.`,ko:`오늘 “${word}”라는 단어를 배웠습니다.`},
       {en:`Can you use “${word}” in a sentence?`,ko:`“${word}”를 문장에서 사용할 수 있나요?`}
     ];
+    return NextResponse.json({examples:fallback},{headers:{'Cache-Control':'public, s-maxage=604800, stale-while-revalidate=2592000'}});
   }
 
-  let related=RELATED[word]?.map(([w,ko])=>({word:w,ko}))||[];
-  if(!related.length) related=(data.synonyms||[]).slice(0,5).map(w=>({word:w,ko:'관련 단어'}));
+  if(part==='related'){
+    const preset=RELATED[word]?.map(([w,ko])=>({word:w,ko}));
+    if(preset?.length){
+      return NextResponse.json({related:preset.slice(0,5)},{headers:{'Cache-Control':'public, s-maxage=2592000, stale-while-revalidate=2592000'}});
+    }
+    const dictionary=await getDictionary(word);
+    let related=(dictionary?.synonyms||[]).slice(0,5).map(w=>({word:w,ko:'관련 단어'}));
+    if(!related.length){
+      const datamuse=await getDatamuse(word);
+      related=(datamuse?.synonyms||[]).slice(0,5).map(w=>({word:w,ko:'관련 단어'}));
+    }
+    return NextResponse.json({related},{headers:{'Cache-Control':'public, s-maxage=604800, stale-while-revalidate=2592000'}});
+  }
+
+  const knownKorean=KO_MEANING[word] || (inputLanguage==='ko' ? original : '');
+  const [dictionary, translatedMeaning]=await Promise.all([
+    getDictionary(word),
+    knownKorean ? Promise.resolve(knownKorean) : translate(word,'en|ko')
+  ]);
+
+  let data=dictionary;
+  if(!data)data=await getDatamuse(word);
+  if(!data)return NextResponse.json({error:`“${word}” 단어 정보를 찾지 못했습니다. 철자를 확인해 주세요.`},{status:404});
+
+  const meanings=(data.meanings?.length?data.meanings:[{partOfSpeech:'word',definition:'영어 단어'}]).slice(0,3).map((m,i)=>({
+    ...m,korean:i===0?(translatedMeaning||''):''
+  }));
 
   return NextResponse.json({
     original,inputLanguage,word:data.word||word,phonetic:data.phonetic||'',
-    koreanPronunciation:PRONUNCIATION_KO[word]||'',meanings,
-    examples:examples.slice(0,3),related:related.slice(0,5)
+    koreanPronunciation:PRONUNCIATION_KO[word]||'',meanings
   },{
     headers:{'Cache-Control':'public, s-maxage=604800, stale-while-revalidate=2592000'}
   });
