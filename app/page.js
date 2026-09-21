@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { getInstantCore } from './coreWords';
 
 const starterWords = ['apple', 'middle', 'center', 'love', 'beautiful'];
 
@@ -44,9 +45,18 @@ export default function Home() {
 
     const key = text.toLowerCase();
     const coreKey = `wordpop-core:${key}`;
-    let core = null;
+    let core = getInstantCore(text);
 
-    try { core = JSON.parse(localStorage.getItem(coreKey) || 'null'); } catch {}
+    if (core) {
+      setResult(core);
+      setLoadingCore(false);
+    } else {
+      try { core = JSON.parse(localStorage.getItem(coreKey) || 'null'); } catch {}
+      if (core) {
+        setResult(core);
+        setLoadingCore(false);
+      }
+    }
 
     try {
       if (!core) {
@@ -56,9 +66,9 @@ export default function Home() {
         if (!res.ok) throw new Error(json.error || '단어를 찾지 못했습니다.');
         core = json;
         try { localStorage.setItem(coreKey, JSON.stringify(core)); } catch {}
+        setResult(core);
       }
 
-      setResult(core);
       setLoadingCore(false);
 
       const nextRecent = [text, ...recent.filter((x) => x !== text)].slice(0, 7);
