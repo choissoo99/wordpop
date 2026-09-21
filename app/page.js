@@ -18,6 +18,7 @@ function speak(text, lang = 'en-US') {
 export default function Home() {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState(null);
+  const [sentenceResult, setSentenceResult] = useState(null);
   const [examples, setExamples] = useState([]);
   const [related, setRelated] = useState([]);
   const [songs, setSongs] = useState([]);
@@ -38,8 +39,32 @@ export default function Home() {
     const text = (raw ?? query).trim();
     if (!text) return;
 
+    const isSentence = text.trim().split(/\s+/).length > 1;
+    if (isSentence) {
+      setQuery(text);
+      setError('');
+      setResult(null);
+      setSentenceResult(null);
+      setExamples([]);
+      setRelated([]);
+      setSongs([]);
+      setLoadingCore(true);
+      try {
+        const res = await fetch(`/api/sentence?q=${encodeURIComponent(text)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || '문장을 처리하지 못했습니다.');
+        setSentenceResult(json);
+      } catch (e) {
+        setError(e.message || '문장 검색 중 오류가 발생했습니다.');
+      } finally {
+        setLoadingCore(false);
+      }
+      return;
+    }
+
     setQuery(text);
     setError('');
+    setSentenceResult(null);
     setExamples([]);
     setRelated([]);
     setSongs([]);
@@ -118,32 +143,54 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <button className="brand" onClick={() => { setResult(null); setQuery(''); setError(''); }}>
+        <button className="brand" onClick={() => { setResult(null); setSentenceResult(null); setQuery(''); setError(''); }}>
           <span className="brandMark">W</span><span>WordPop</span>
         </button>
         <div className="tagline">발음부터 팝송까지</div>
       </header>
 
-      <section className={result ? 'hero compact' : 'hero'}>
-        {!result && (
+      <section className={(result || sentenceResult) ? 'hero compact' : 'hero'}>
+        {!result && !sentenceResult && (
           <div className="heroCopy">
             <span className="eyebrow">ENGLISH WORD COMPANION</span>
             <h1>단어 하나로<br/><strong>영어가 연결됩니다.</strong></h1>
-            <p>가장 중요한 단어 뜻과 발음을 먼저 보여주고, 예문과 관련 단어, 팝송은 순서대로 불러옵니다.</p>
+            <p>단어는 뜻과 발음을 빠르게, 문장은 전체 해석과 핵심 단어까지 한 번에 보여줍니다.</p>
           </div>
         )}
 
         <form className="searchBox" onSubmit={onSubmit}>
           <span className="searchIcon">⌕</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 또는 한글을 입력하세요" aria-label="단어 검색"/>
-          <button type="submit" disabled={loadingCore}>{loadingCore ? '뜻 찾는 중...' : '검색'}</button>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 단어 또는 문장을 입력하세요" aria-label="단어 또는 문장 검색"/>
+          <button type="submit" disabled={loadingCore}>{loadingCore ? '검색 중...' : '검색'}</button>
         </form>
 
-        {!result && <div className="quickWords"><span>추천 검색</span>{starterWords.map((word) => <button key={word} onClick={() => search(word)}>{word}</button>)}</div>}
-        {!result && recent.length > 0 && <div className="recentRow"><span>최근 검색</span>{recent.map((word) => <button key={word} onClick={() => search(word)}>{word}</button>)}</div>}
+        {!result && !sentenceResult && <div className="quickWords"><span>추천 검색</span>{starterWords.map((word) => <button key={word} onClick={() => search(word)}>{word}</button>)}</div>}
+        {!result && !sentenceResult && recent.length > 0 && <div className="recentRow"><span>최근 검색</span>{recent.map((word) => <button key={word} onClick={() => search(word)}>{word}</button>)}</div>}
       </section>
 
       {error && <div className="errorCard">{error}</div>}
+
+      {sentenceResult && (
+        <div className="content">
+          <section className="panel priorityPanel">
+            <div className="sectionHead">
+              <div><span className="sectionKicker">SENTENCE</span><h3>문장 해석</h3></div>
+              <button className="roundSpeak" onClick={() => speak(sentenceResult.speakText)} aria-label="문장 발음 듣기">🔊</button>
+            </div>
+            <div className="exampleText">
+              <p style={{fontSize:'22px',fontWeight:800,marginBottom:'12px'}}>{sentenceResult.original}</p>
+              <span style={{fontSize:'17px'}}>{sentenceResult.translation}</span>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="sectionHead"><div><span className="sectionKicker">KEY WORDS</span><h3>핵심 단어</h3></div></div>
+            <div className="relatedGrid">
+              {(sentenceResult.keywords || []).map((item)=><button key={item.word} className="relatedChip" onClick={()=>search(item.word)}><strong>{item.word}</strong><span>{item.meaning}{item.phonetic ? ` · ${item.phonetic}` : ''}</span></button>)}
+            </div>
+          </section>
+        </div>
+      )}
 
       {result && (
         <div className="content">
