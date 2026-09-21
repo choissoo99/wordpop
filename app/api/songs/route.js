@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 
+async function fastFetch(url,options={},ms=1500){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),ms);
+  try{return await fetch(url,{...options,signal:controller.signal});}
+  finally{clearTimeout(timer);}
+}
+
 const CURATED={
   beautiful:[['Christina Aguilera','Beautiful'],['James Blunt',"You're Beautiful"],['Bazzi','Beautiful']],
   love:[['Taylor Swift','Love Story'],['Ellie Goulding','Love Me Like You Do'],['The Beatles','All You Need Is Love']],
@@ -13,7 +20,7 @@ export async function GET(request){
   if(!term)return NextResponse.json({songs:[]});
   if(CURATED[term])return NextResponse.json({songs:CURATED[term].map(([artist,title],i)=>({id:`c-${i}`,artist,title,artwork:'',youtubeUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(`${artist} ${title}`)}`}))});
   try{
-    const res=await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=18`,{next:{revalidate:86400}});
+    const res=await fastFetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=18`,{next:{revalidate:86400}},1500);
     const data=await res.json();
     const exact=(data.results||[]).filter(x=>x.trackName?.toLowerCase().includes(term));
     const source=exact.length?exact:(data.results||[]).slice(0,6);
