@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getInstantCore } from './coreWords';
 
-const starterWords = ['apple', 'middle', 'center', 'love', 'beautiful'];
+const APP_VERSION = '2026-09-21-ipa-fix-2';
+const starterWords = ['apple', 'middle', 'center', 'point', 'love', 'beautiful'];
 
 function speak(text, lang = 'en-US') {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
@@ -44,7 +45,7 @@ export default function Home() {
     setSongs([]);
 
     const key = text.toLowerCase();
-    const coreKey = `wordpop-core:${key}`;
+    const coreKey = `wordpop-core:${APP_VERSION}:${key}`;
     let core = getInstantCore(text);
 
     if (core) {
@@ -183,7 +184,7 @@ export default function Home() {
         </div>
       )}
 
-      <footer>WordPop · 뜻과 발음을 먼저, 나머지는 순차적으로</footer>
+      <footer>WordPop · 뜻과 발음을 먼저, 나머지는 순차적으로 · v2</footer>
     </main>
   );
 }
