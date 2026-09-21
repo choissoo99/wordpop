@@ -102,6 +102,7 @@ export const CORE_WORDS = {
   city:{m:'도시',ipa:'/ˈsɪti/',ko:'시티',pos:'noun'},
   country:{m:'나라, 시골',ipa:'/ˈkʌntri/',ko:'컨트리',pos:'noun'},
   place:{m:'장소, 놓다',ipa:'/pleɪs/',ko:'플레이스',pos:'noun · verb'},
+  point:{m:'점, 지점, 요점, 가리키다',ipa:'/pɔɪnt/',ko:'포인트',pos:'noun · verb'},
   start:{m:'시작하다, 시작',ipa:'/stɑːrt/',ko:'스타트',pos:'verb · noun'},
   stop:{m:'멈추다, 정지',ipa:'/stɑːp/',ko:'스탑',pos:'verb · noun'},
   begin:{m:'시작하다',ipa:'/bɪˈɡɪn/',ko:'비긴',pos:'verb'},
