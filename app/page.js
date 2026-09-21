@@ -75,35 +75,30 @@ export default function Home() {
       setRecent(nextRecent);
       try { localStorage.setItem('wordpop-recent', JSON.stringify(nextRecent)); } catch {}
 
-      // 2단계: 예문
+      // 단어 뜻이 화면에 먼저 그려진 뒤, 나머지는 동시에 백그라운드 로딩
       setLoadingExamples(true);
-      try {
-        const res = await fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=examples`);
-        const json = await res.json();
-        if (res.ok) setExamples(json.examples || []);
-      } finally {
-        setLoadingExamples(false);
-      }
-
-      // 3단계: 관련 단어
       setLoadingRelated(true);
-      try {
-        const res = await fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=related`);
-        const json = await res.json();
-        if (res.ok) setRelated(json.related || []);
-      } finally {
-        setLoadingRelated(false);
-      }
-
-      // 4단계: 팝송
       setLoadingSongs(true);
-      try {
-        const res = await fetch(`/api/songs?term=${encodeURIComponent(core.word)}`);
-        const json = await res.json();
-        if (res.ok) setSongs(json.songs || []);
-      } finally {
-        setLoadingSongs(false);
-      }
+
+      const loadExamples = fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=examples`)
+        .then(r => r.json().then(j => ({ok:r.ok,j})))
+        .then(({ok,j}) => { if (ok) setExamples(j.examples || []); })
+        .catch(() => {})
+        .finally(() => setLoadingExamples(false));
+
+      const loadRelated = fetch(`/api/lookup?q=${encodeURIComponent(core.word)}&part=related`)
+        .then(r => r.json().then(j => ({ok:r.ok,j})))
+        .then(({ok,j}) => { if (ok) setRelated(j.related || []); })
+        .catch(() => {})
+        .finally(() => setLoadingRelated(false));
+
+      const loadSongs = fetch(`/api/songs?term=${encodeURIComponent(core.word)}`)
+        .then(r => r.json().then(j => ({ok:r.ok,j})))
+        .then(({ok,j}) => { if (ok) setSongs(j.songs || []); })
+        .catch(() => {})
+        .finally(() => setLoadingSongs(false));
+
+      void Promise.allSettled([loadExamples, loadRelated, loadSongs]);
     } catch (e) {
       setError(e.message || '검색 중 오류가 발생했습니다.');
       setResult(null);
