@@ -53,6 +53,32 @@ const isKorean=(text)=>/[가-힣]/.test(text);
 const cleanWord=(text='')=>text.toLowerCase().trim().replace(/[^a-z'-]/g,'');
 const posMap={n:'noun',v:'verb',adj:'adjective',adv:'adverb',u:'word'};
 
+const ARPA_IPA={
+  AA:'ɑ',AE:'æ',AH:'ʌ',AO:'ɔ',AW:'aʊ',AY:'aɪ',EH:'ɛ',ER:'ɝ',EY:'eɪ',IH:'ɪ',IY:'i',OW:'oʊ',OY:'ɔɪ',UH:'ʊ',UW:'u',
+  B:'b',CH:'tʃ',D:'d',DH:'ð',F:'f',G:'ɡ',HH:'h',JH:'dʒ',K:'k',L:'l',M:'m',N:'n',NG:'ŋ',P:'p',R:'r',S:'s',
+  SH:'ʃ',T:'t',TH:'θ',V:'v',W:'w',Y:'j',Z:'z',ZH:'ʒ'
+};
+
+function arpabetToIPA(pron=''){
+  if(!pron)return '';
+  const parts=pron.trim().split(/\s+/);
+  if(parts.length===1 && !/[A-Z]{2}/.test(parts[0])) return pron;
+  let stressIndex=-1;
+  const phones=parts.map((token,i)=>{
+    const m=token.match(/^([A-Z]+)([012])?$/);
+    if(!m)return token;
+    const base=m[1];
+    const stress=m[2];
+    if(stress==='1' && stressIndex<0)stressIndex=i;
+    let ipa=ARPA_IPA[base]||base.toLowerCase();
+    if(base==='AH' && stress!=='1') ipa='ə';
+    if(base==='ER' && stress!=='1') ipa='ɚ';
+    return ipa;
+  });
+  if(stressIndex>=0) phones[stressIndex]='ˈ'+phones[stressIndex];
+  return '/'+phones.join('')+'/';
+}
+
 async function fastFetch(url,options={},ms=1200){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),ms);
@@ -100,7 +126,8 @@ async function getDatamuse(word){
       const [tag,...rest]=raw.split('\t');
       return {partOfSpeech:posMap[tag]||tag||'word',definition:rest.join(' ').trim()};
     }).filter(x=>x.definition);
-    const pron=(exact.tags||[]).find(t=>t.startsWith('pron:'))?.slice(5)||'';
+    const rawPron=(exact.tags||[]).find(t=>t.startsWith('pron:'))?.slice(5)||'';
+    const pron=arpabetToIPA(rawPron);
     const related=(data||[]).filter(x=>x.word&&x.word!==word).map(x=>x.word).slice(0,5);
     return {word:exact.word||word,phonetic:pron,meanings:defs,examples:[],synonyms:related};
   }catch{return null;}
