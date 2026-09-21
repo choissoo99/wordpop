@@ -160,12 +160,13 @@ export async function GET(request){
   const data=dictionary||datamuse;
   if(!data)return NextResponse.json({error:`“${word}” 단어 정보를 찾지 못했습니다. 철자를 확인해 주세요.`},{status:404});
 
+  const phonetic=(dictionary?.phonetic || datamuse?.phonetic || '').trim();
   const meanings=(data.meanings?.length?data.meanings:[{partOfSpeech:'word',definition:'영어 단어'}]).slice(0,3).map((m,i)=>({
     ...m,korean:i===0?(translatedMeaning||''):''
   }));
 
   return NextResponse.json({
-    original,inputLanguage,word:data.word||word,phonetic:data.phonetic||'',
+    original,inputLanguage,word:data.word||word,phonetic,
     koreanPronunciation:PRONUNCIATION_KO[word]||'',meanings
   },{
     headers:{'Cache-Control':'public, s-maxage=604800, stale-while-revalidate=2592000'}
