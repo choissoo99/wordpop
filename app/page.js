@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getInstantCore } from './coreWords';
 
-const APP_VERSION = '2026-09-21-ipa-fix-2';
+const APP_VERSION = '2026-09-21-sentence-v3';
 const starterWords = ['apple', 'middle', 'center', 'point', 'love', 'beautiful'];
 
 function speak(text, lang = 'en-US') {
@@ -160,7 +160,7 @@ export default function Home() {
 
         <form className="searchBox" onSubmit={onSubmit}>
           <span className="searchIcon">⌕</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 단어 또는 문장을 입력하세요" aria-label="단어 또는 문장 검색"/>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="영어 단어 또는 문장을 입력하세요 · 문장 검색 지원" aria-label="단어 또는 문장 검색"/>
           <button type="submit" disabled={loadingCore}>{loadingCore ? '검색 중...' : '검색'}</button>
         </form>
 
@@ -231,7 +231,7 @@ export default function Home() {
         </div>
       )}
 
-      <footer>WordPop · 뜻과 발음을 먼저, 나머지는 순차적으로 · v2</footer>
+      <footer>WordPop · 단어 + 문장 검색 · v3</footer>
     </main>
   );
 }
