@@ -53,9 +53,19 @@ const isKorean=(text)=>/[가-힣]/.test(text);
 const cleanWord=(text='')=>text.toLowerCase().trim().replace(/[^a-z'-]/g,'');
 const posMap={n:'noun',v:'verb',adj:'adjective',adv:'adverb',u:'word'};
 
+async function fastFetch(url,options={},ms=1200){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),ms);
+  try{
+    return await fetch(url,{...options,signal:controller.signal});
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
 async function translate(text,langpair){
   try{
-    const res=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`,{next:{revalidate:604800}});
+    const res=await fastFetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`,{next:{revalidate:604800}},900);
     if(!res.ok)return '';
     const data=await res.json();
     return typeof data?.responseData?.translatedText==='string' ? data.responseData.translatedText.trim() : '';
@@ -64,7 +74,7 @@ async function translate(text,langpair){
 
 async function getDictionary(word){
   try{
-    const res=await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,{next:{revalidate:604800}});
+    const res=await fastFetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,{next:{revalidate:604800}},1200);
     if(!res.ok)return null;
     const entry=(await res.json())?.[0];
     if(!entry)return null;
@@ -81,7 +91,7 @@ async function getDictionary(word){
 
 async function getDatamuse(word){
   try{
-    const res=await fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dp&max=5`,{next:{revalidate:604800}});
+    const res=await fastFetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dp&max=5`,{next:{revalidate:604800}},1200);
     if(!res.ok)return null;
     const data=await res.json();
     const exact=(data||[]).find(x=>x.word?.toLowerCase()===word.toLowerCase()) || data?.[0];
@@ -141,13 +151,13 @@ export async function GET(request){
   }
 
   const knownKorean=KO_MEANING[word] || (inputLanguage==='ko' ? original : '');
-  const [dictionary, translatedMeaning]=await Promise.all([
+  const [dictionary,datamuse,translatedMeaning]=await Promise.all([
     getDictionary(word),
+    getDatamuse(word),
     knownKorean ? Promise.resolve(knownKorean) : translate(word,'en|ko')
   ]);
 
-  let data=dictionary;
-  if(!data)data=await getDatamuse(word);
+  const data=dictionary||datamuse;
   if(!data)return NextResponse.json({error:`“${word}” 단어 정보를 찾지 못했습니다. 철자를 확인해 주세요.`},{status:404});
 
   const meanings=(data.meanings?.length?data.meanings:[{partOfSpeech:'word',definition:'영어 단어'}]).slice(0,3).map((m,i)=>({
