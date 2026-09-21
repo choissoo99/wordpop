@@ -117,7 +117,7 @@ async function getDictionary(word){
 
 async function getDatamuse(word){
   try{
-    const res=await fastFetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dp&max=5`,{next:{revalidate:604800}},1200);
+    const res=await fastFetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=dpr&max=5`,{next:{revalidate:604800}},1200);
     if(!res.ok)return null;
     const data=await res.json();
     const exact=(data||[]).find(x=>x.word?.toLowerCase()===word.toLowerCase()) || data?.[0];
@@ -131,6 +131,17 @@ async function getDatamuse(word){
     const related=(data||[]).filter(x=>x.word&&x.word!==word).map(x=>x.word).slice(0,5);
     return {word:exact.word||word,phonetic:pron,meanings:defs,examples:[],synonyms:related};
   }catch{return null;}
+}
+
+async function getPronunciationOnly(word){
+  try{
+    const res=await fastFetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=r&max=1`,{next:{revalidate:2592000}},900);
+    if(!res.ok)return '';
+    const data=await res.json();
+    const exact=(data||[]).find(x=>x.word?.toLowerCase()===word.toLowerCase()) || data?.[0];
+    const raw=(exact?.tags||[]).find(t=>t.startsWith('pron:'))?.slice(5)||'';
+    return arpabetToIPA(raw);
+  }catch{return '';}
 }
 
 async function resolveEnglishFromKorean(original){
@@ -187,7 +198,8 @@ export async function GET(request){
   const data=dictionary||datamuse;
   if(!data)return NextResponse.json({error:`“${word}” 단어 정보를 찾지 못했습니다. 철자를 확인해 주세요.`},{status:404});
 
-  const phonetic=(dictionary?.phonetic || datamuse?.phonetic || '').trim();
+  let phonetic=(dictionary?.phonetic || datamuse?.phonetic || '').trim();
+  if(!phonetic) phonetic=await getPronunciationOnly(word);
   const meanings=(data.meanings?.length?data.meanings:[{partOfSpeech:'word',definition:'영어 단어'}]).slice(0,3).map((m,i)=>({
     ...m,korean:i===0?(translatedMeaning||''):''
   }));
